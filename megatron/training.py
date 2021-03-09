@@ -39,11 +39,9 @@ from megatron.checkpointing import load_checkpoint
 from megatron.checkpointing import save_checkpoint
 from megatron.model import FP16Module
 from megatron.optimizer import get_megatron_optimizer
-
 from megatron.initialize import initialize_megatron
 from megatron.initialize import write_args_to_tensorboard
 from megatron.learning_rates import AnnealingLR
-from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.model.realm_model import ICTBertModel
 from megatron.utils import check_adlr_autoresume_termination
 from megatron.data.data_loaders import build_pretraining_data_loader
@@ -56,6 +54,7 @@ def print_datetime(string):
     time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print_rank_0('[' + string + '] datetime: {} '.format(time_str))
 
+LocalDDP = None
 
 def pretrain(train_valid_test_dataset_provider, model_provider,
              forward_step_func, extra_args_provider=None, args_defaults={}):
@@ -101,6 +100,14 @@ def pretrain(train_valid_test_dataset_provider, model_provider,
 
     args = get_args()
     timers = get_timers()
+
+    # Setup ddp for FastMoE
+    if args.fmoefy:
+        from fmoe.megatron import DistributedDataParallel as _LocalDDP
+    else:
+        from megatron.model import DistributedDataParallel as _LocalDDP
+    global LocalDDP
+    LocalDDP = _LocalDDP
 
     # Model, optimizer, and learning rate.
     timers('model and optimizer').start()

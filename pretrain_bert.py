@@ -53,6 +53,14 @@ def model_provider():
             add_binary_head=True,
             parallel_output=True)
 
+    if args.fmoefy:
+        from fmoe.megatron import fmoefy
+        model = fmoefy(
+            model,
+            num_experts=args.num_experts,
+            hidden_hidden_size=4 * args.hidden_size // args.top_k,
+            top_k=args.top_k)
+
     return model
 
 
