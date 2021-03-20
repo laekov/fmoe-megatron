@@ -27,8 +27,6 @@ from megatron.model import BertModel, BertModelFirstStage, BertModelIntermediate
 from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
 
-from fmoe.megatron import get_balance_profile
-from fmoe.utils import get_torch_default_comm
 
 def model_provider():
     """Build the model."""
@@ -54,14 +52,6 @@ def model_provider():
             num_tokentypes=2,
             add_binary_head=True,
             parallel_output=True)
-
-    if args.fmoefy:
-        from fmoe.megatron import fmoefy
-        model = fmoefy(
-            model,
-            num_experts=args.num_experts,
-            hidden_hidden_size=4 * args.hidden_size // args.top_k,
-            top_k=args.top_k)
 
     return model
 
@@ -130,26 +120,11 @@ def forward_step(data_iterator, model, input_tensor):
         lm_loss = torch.sum(
             lm_loss_.view(-1) * loss_mask.reshape(-1)) / loss_mask.sum()
 
-        balance_dict = get_balance_profile()
-        bal_loss = (
-                torch.tensor(
-                    balance_dict["bal_loss"], device=balance_dict["bal_loss"][0].device
-                ).mean()
-                * args.balance_weight
-        ).float()
-
-        # avarage across world group
-        world_group = get_torch_default_comm()
-        world_size = torch.distributed.get_world_size(group=world_group)
-        averaged_bal_loss = bal_loss.clone().detach()
-        torch.distributed.all_reduce(averaged_bal_loss, group=world_group)
-        averaged_bal_loss /= world_size
-
-        loss = lm_loss + sop_loss + bal_loss
+        loss = lm_loss + sop_loss
 
         averaged_losses = average_losses_across_data_parallel_group([lm_loss, sop_loss])
 
-        return loss, {'lm loss': averaged_losses[0], 'sop loss': averaged_losses[1], 'bal loss': averaged_bal_loss}
+        return loss, {'lm loss': averaged_losses[0], 'sop loss': averaged_losses[1]}
     return output_tensor
 
 

@@ -133,7 +133,7 @@ def _set_tensorboard_writer(args):
     if hasattr(args, 'tensorboard_dir') and \
        args.tensorboard_dir and args.rank == (args.world_size -1):
         try:
-            from tensorboardX import SummaryWriter
+            from torch.utils.tensorboard import SummaryWriter
             print('> setting tensorboard ...')
             _GLOBAL_TENSORBOARD_WRITER = SummaryWriter(
                 log_dir=args.tensorboard_dir)

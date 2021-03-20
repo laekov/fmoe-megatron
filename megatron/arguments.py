@@ -21,6 +21,8 @@ import os
 import torch
 from megatron import fused_kernels
 
+from fmoe.megatron import add_fmoe_args as _add_fmoe_args
+
 def parse_args(extra_args_provider=None, defaults={},
                ignore_unknown_args=False):
     """Parse all arguments."""
@@ -40,6 +42,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = _add_data_args(parser)
     parser = _add_autoresume_args(parser)
     parser = _add_realm_args(parser)
+    parser = _add_fmoe_args(parser)
 
     # Custom arguments.
     if extra_args_provider is not None:
@@ -247,9 +250,6 @@ def _add_network_size_args(parser):
                        'reasons.')
     group.add_argument('--onnx-safe', type=bool, required=False,
                        help='Use workarounds for known problems with Torch ONNX exporter')
-    group.add_argument('--fmoefy', action='store_true')
-    group.add_argument('--num-experts', type=int, default=None)
-    group.add_argument('--top-k', type=int, default=2)
 
     return parser
 
@@ -349,7 +349,6 @@ def _add_training_args(parser):
     group.add_argument('--no-bias-dropout-fusion', action='store_false',
                        help='Disable bias and dropout fusion.',
                        dest='bias_dropout_fusion')
-    group.add_argument('--balance-weight', type=float, default=1000)
 
     return parser
 

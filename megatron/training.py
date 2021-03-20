@@ -39,6 +39,7 @@ from megatron.checkpointing import load_checkpoint
 from megatron.checkpointing import save_checkpoint
 from megatron.model import FP16Module
 from megatron.optimizer import get_megatron_optimizer
+
 from megatron.initialize import initialize_megatron
 from megatron.initialize import write_args_to_tensorboard
 from megatron.learning_rates import AnnealingLR
@@ -47,9 +48,7 @@ from megatron.utils import check_adlr_autoresume_termination
 from megatron.data.data_loaders import build_pretraining_data_loader
 from megatron.utils import report_memory
 
-from fmoe.megatron import get_balance_profile, reset_gate_hook
-from fmoe.utils import get_torch_default_comm
-
+from fmoe.megatron import add_balance_log
 
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
@@ -104,9 +103,13 @@ def pretrain(train_valid_test_dataset_provider, model_provider,
     args = get_args()
     timers = get_timers()
 
-    # Setup ddp for FastMoE
+    # Initialize FastMoE
     if args.fmoefy:
         from fmoe.megatron import DistributedDataParallel as _LocalDDP
+        from fmoe.megatron import patch_forward_step, patch_model_provider
+
+        forward_step_func = patch_forward_step(forward_step_func)
+        model_provider = patch_model_provider(model_provider)
     else:
         from megatron.model import DistributedDataParallel as _LocalDDP
     global LocalDDP
@@ -736,32 +739,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         timers.write(timers_to_log, writer, iteration,
                      normalizer=total_iterations)
 
-    # report balance
-    if args.fmoefy:
-        balance_dict = get_balance_profile()
-        balance_dict_tensor = torch.vstack(
-            [
-                torch.tensor(item, device=item[0].device)
-                for item in balance_dict.values()
-            ]
-        ).detach()
-        world_group = get_torch_default_comm()
-        world_size = torch.distributed.get_world_size(group=world_group)
-        torch.distributed.all_reduce(balance_dict_tensor, group=world_group)
-        balance_dict_tensor /= world_size
-
-        if writer and is_last_rank():
-            for idx, metric_name in enumerate(balance_dict):
-                for layer_id, val in enumerate(balance_dict_tensor[idx]):
-                    writer.add_scalar(
-                        f"balance-{metric_name}/layer-{layer_id}", val.item(), iteration
-                    )
-                writer.add_scalar(
-                    f"balance-{metric_name}/all",
-                    balance_dict_tensor[idx].mean().item(),
-                    iteration,
-                )
-    reset_gate_hook()
+    add_balance_log(writer, iteration)
 
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval time').elapsed()
