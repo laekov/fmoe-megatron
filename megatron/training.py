@@ -739,7 +739,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         timers.write(timers_to_log, writer, iteration,
                      normalizer=total_iterations)
 
-    add_balance_log(writer, iteration)
+    if args.fmoefy:
+        add_balance_log(writer, iteration)
 
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval time').elapsed()
